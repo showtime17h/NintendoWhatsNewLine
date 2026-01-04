@@ -1,40 +1,90 @@
 import feedparser
 import requests
 import os
+from bs4 import BeautifulSoup
 
-# 設定（後ほどGitHubの秘密変数から読み込みます）
+# 設定（GitHubのSecretsから読み込み）
 LINE_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
 USER_ID = os.environ["USER_ID"]
 
-def send_line(message):
+def get_article_image(url):
+    """記事のURLからサムネイル画像を頑張って探す関数"""
+    try:
+        res = requests.get(url, timeout=10)
+        res.encoding = res.apparent_encoding
+        soup = BeautifulSoup(res.text, 'html.parser')
+        # OGP画像（SNS用画像）を探す
+        og_image = soup.find("meta", property="og:image")
+        if og_image:
+            return og_image["content"]
+    except:
+        pass
+    # 見つからない時の予備画像（任天堂のロゴなど）
+    return "https://www.nintendo.co.jp/common/img/i/icon_nintendo.png"
+
+def send_flex_message(title, link, image_url):
+    """豪華な見た目のメッセージを送る本体"""
     url = "https://api.line.me/v2/bot/message/push"
-    headers = {"Authorization": f"Bearer {LINE_TOKEN}"}
-    payload = {"to": USER_ID, "messages": [{"type": "text", "text": message}]}
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_TOKEN}"
+    }
+    
+    # Flex Messageの構造（JSON）
+    flex_content = {
+        "type": "bubble",
+        "hero": {
+            "type": "image",
+            "url": image_url,
+            "size": "full",
+            "aspectRatio": "20:13",
+            "aspectMode": "cover"
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {"type": "text", "text": "Nintendo Topics", "weight": "bold", "color": "#E60012", "size": "sm"},
+                {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "margin": "md"},
+                {"type": "separator", "margin": "xxl"},
+                {"type": "button", "action": {"type": "uri", "label": "記事を読む", "uri": link}, "style": "primary", "color": "#E60012", "margin": "md"}
+            ]
+        }
+    }
+
+    payload = {
+        "to": USER_ID,
+        "messages": [{
+            "type": "flex",
+            "altText": f"新着：{title}",
+            "contents": flex_content
+        }]
+    }
     requests.post(url, headers=headers, json=payload)
 
 def main():
-    RSS_URL = "https://www.nintendo.co.jp/news/whatsnew.xml"
+    RSS_URL = "https://www.nintendo.co.jp/data/rss/topics.xml"
     feed = feedparser.parse(RSS_URL)
     
     if not feed.entries:
         return
 
-    # 最新記事のタイトルとURL
-    latest_entry = feed.entries[0]
-    title = latest_entry.title
-    link = latest_entry.link
+    entry = feed.entries[0]
+    title = entry.title
+    link = entry.link
 
-    # 前回保存したタイトルを読み込む
+    # 重複チェック
     last_title = ""
     if os.path.exists("last_news.txt"):
         with open("last_news.txt", "r", encoding="utf-8") as f:
             last_title = f.read().strip()
 
-    # 新着があれば通知
     if title != last_title:
-        msg = f"【任天堂ニュース新着】\n{title}\n{link}"
-        send_line(msg)
-        # 今回のタイトルを保存
+        # 画像を取得して送信
+        image_url = get_article_image(link)
+        send_flex_message(title, link, image_url)
+        
+        # タイトル保存
         with open("last_news.txt", "w", encoding="utf-8") as f:
             f.write(title)
 
