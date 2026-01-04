@@ -79,7 +79,7 @@ def main():
         with open("last_news.txt", "r", encoding="utf-8") as f:
             last_title = f.read().strip()
 
-    if True= last_title:
+    if True:
         # 画像を取得して送信
         image_url = get_article_image(link)
         send_flex_message(title, link, image_url)
