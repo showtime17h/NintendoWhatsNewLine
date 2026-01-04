@@ -9,6 +9,7 @@ LINE_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 USER_ID = os.environ.get("USER_ID")
 
 def get_article_image(url):
+    """記事のURLからサムネイル画像を探す"""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"}
     try:
         res = requests.get(url, headers=headers, timeout=10)
@@ -21,6 +22,7 @@ def get_article_image(url):
     return "https://www.nintendo.co.jp/common/img/i/icon_nintendo.png"
 
 def send_flex_message(title, link, image_url):
+    """LINEにFlex Messageを送る"""
     url = "https://api.line.me/v2/bot/message/push"
     headers = {
         "Content-Type": "application/json",
@@ -40,7 +42,7 @@ def send_flex_message(title, link, image_url):
             "type": "box",
             "layout": "vertical",
             "contents": [
-                {"type": "text", "text": "Nintendo Topics", "weight": "bold", "color": "#E60012", "size": "sm"},
+                {"type": "text", "text": "Nintendo News", "weight": "bold", "color": "#E60012", "size": "sm"},
                 {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "margin": "md"},
                 {"type": "separator", "margin": "xxl"},
                 {"type": "button", "action": {"type": "uri", "label": "記事を読む", "uri": link}, "style": "primary", "color": "#E60012", "margin": "md"}
@@ -59,39 +61,53 @@ def send_flex_message(title, link, image_url):
     requests.post(url, headers=headers, json=payload)
 
 def main():
-    RSS_URL = "https://www.nintendo.co.jp/data/rss/topics.xml"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"}
+    # 教えていただいた正しいRSS URL
+    RSS_URL = "https://www.nintendo.co.jp/news/whatsnew.xml"
     
-    # 3回までリトライする
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+        "Accept": "text/xml,application/xml,application/xhtml+xml",
+    }
+    
     feed = None
-    for i in range(3):
-        try:
-            rss_res = requests.get(RSS_URL, headers=headers, timeout=10)
+    try:
+        print(f"RSS取得を試行中: {RSS_URL}")
+        rss_res = requests.get(RSS_URL, headers=headers, timeout=15)
+        if rss_res.status_code == 200:
             feed = feedparser.parse(rss_res.content)
-            if feed.entries:
-                break
-            time.sleep(2) # 失敗したら2秒待つ
-        except:
-            continue
-    
-    if not feed or not feed.entries:
-        print("RSSの取得に失敗しました。")
-        return
+    except Exception as e:
+        print(f"エラー: {e}")
 
-    entry = feed.entries[0]
-    title = entry.title
-    link = entry.link
+    if feed and feed.entries:
+        print("RSS取得成功！")
+        entry = feed.entries[0]
+        title = entry.title
+        link = entry.link
+    else:
+        # 万が一RSSがブロックされた場合の代替手段（ニュース一覧ページを解析）
+        print("RSSが取得できなかったため、直接ページを解析します。")
+        try:
+            res = requests.get("https://www.nintendo.co.jp/news/index.html", headers=headers, timeout=15)
+            soup = BeautifulSoup(res.text, 'html.parser')
+            # 最初のニュースのリンクを取得（構造に合わせて調整）
+            first_news = soup.find('a', class_='nc-c-newsCard')
+            if not first_news:
+                first_news = soup.select_one('.nc-c-newsCardList__item a')
+                
+            title = first_news.find('h3').get_text(strip=True)
+            link = first_news['href']
+            if not link.startswith('http'):
+                link = "https://www.nintendo.co.jp" + link
+        except Exception as e:
+            print(f"最終手段も失敗しました: {e}")
+            return
 
-    # 重複チェック（通常運用に戻す）
-    last_title = ""
-    if os.path.exists("last_news.txt"):
-        with open("last_news.txt", "r", encoding="utf-8") as f:
-            last_title = f.read().strip()
-
-    # 今回はテストなので「!=」ではなく「True」にして、実際のニュースが届くか最終確認してください
+    # 重複チェック（テスト用にTrueにしています）
     if True: 
+        print(f"送信内容: {title}")
         image_url = get_article_image(link)
         send_flex_message(title, link, image_url)
+        
         with open("last_news.txt", "w", encoding="utf-8") as f:
             f.write(title)
 
