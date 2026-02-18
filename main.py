@@ -4,7 +4,7 @@ import os
 import time
 
 # --- 設定 ---
-RSS_URL = "https://www.nintendo.co.jp/rss/topics/index.xml"
+RSS_URL = "https://www.nintendo.co.jp/news/whatsnew.xml?_gl=1*1qkfg0q*_gcl_aw*R0NMLjE3Njg3MzU3NDMuQ2owS0NRaUFwckxMQmhDTUFSSXNBRURoZFBkam1DMUxGQjMzRW9SWXpQRmtsX2tZcC1aeGM4NnFjLWE1OW9GWjVMVHJyZjlCVTZiRXdLNGFBazdBRUFMd193Y0I.*_gcl_au*MjUzODU0NTQwLjE3NjU3ODY0Mjc.*_ga*MTE5MzAxODE5LjE3NjI1MDI1MTg.*_ga_128BBZFV9V*czE3NzE0MDc3MTAkbzE5JGcxJHQxNzcxNDA3ODQ2JGoyOCRsMCRoMA.."
 LINE_NOTIFY_URL = "https://api.line.me/v2/bot/message/push"
 LAST_FILE = "last_news.txt"
 MAX_SEND_COUNT = 3  # 1回の実行で送る最大件数（LINE枠節約のため）
