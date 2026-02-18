@@ -17,20 +17,19 @@ def get_article_image(url):
         headers = {"User-Agent": "Mozilla/5.0"}
         res = requests.get(url, headers=headers, timeout=5)
         soup = BeautifulSoup(res.text, "html.parser")
-        # og:imageタグを探す
         og_image = soup.find("meta", property="og:image")
         if og_image:
             return og_image["content"]
     except:
         pass
-    # 取得失敗時はデフォルト画像
     return "https://www.nintendo.co.jp/common/img/header/logo_nintendo.png"
 
 def send_flex_message(item):
     token = os.environ.get("LINE_ACCESS_TOKEN")
     user_id = os.environ.get("USER_ID")
     
-    # 記事ごとの画像をスクレイピングで取得
+    # カテゴリー（トピックの種類）を取得。無い場合は「Nintendo News」
+    category_name = item.get("category", "Nintendo News")
     image_url = get_article_image(item.link)
 
     headers = {
@@ -38,7 +37,6 @@ def send_flex_message(item):
         "Authorization": f"Bearer {token}"
     }
     
-    # Flex MessageのJSON構造
     flex_contents = {
         "type": "bubble",
         "hero": {
@@ -52,8 +50,21 @@ def send_flex_message(item):
             "type": "box",
             "layout": "vertical",
             "contents": [
-                {"type": "text", "text": "Nintendo News", "weight": "bold", "color": "#e60012", "size": "sm"},
-                {"type": "text", "text": item.title, "weight": "bold", "size": "md", "wrap": True, "margin": "md"},
+                {
+                    "type": "text", 
+                    "text": category_name,  # 🌟 ここがトピックの種類になります
+                    "weight": "bold", 
+                    "color": "#e60012", 
+                    "size": "sm"
+                },
+                {
+                    "type": "text", 
+                    "text": item.title, 
+                    "weight": "bold", 
+                    "size": "md", 
+                    "wrap": True, 
+                    "margin": "md"
+                }
             ]
         },
         "footer": {
@@ -72,7 +83,7 @@ def send_flex_message(item):
 
     payload = {
         "to": user_id,
-        "messages": [{"type": "flex", "altText": item.title, "contents": flex_contents}]
+        "messages": [{"type": "flex", "altText": f"[{category_name}] {item.title}", "contents": flex_contents}]
     }
     
     requests.post(LINE_NOTIFY_URL, headers=headers, data=json.dumps(payload))
@@ -82,7 +93,6 @@ def main():
     response = requests.get(RSS_URL, headers=headers)
     feed = feedparser.parse(response.content)
     
-    # 時系列ソート（古い順）
     entries = sorted(feed.entries, key=lambda x: x.get("published_parsed", 0))
     
     last_title = ""
@@ -110,7 +120,7 @@ def main():
         send_flex_message(item)
         latest_title = item.title
         send_cnt += 1
-        time.sleep(2) # スクレイピングの負荷軽減のため少し待機
+        time.sleep(2)
     
     with open(LAST_FILE, "w", encoding="utf-8") as f:
         f.write(latest_title)
