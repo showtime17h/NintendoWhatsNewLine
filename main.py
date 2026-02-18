@@ -4,13 +4,13 @@ import os
 import time
 
 # --- 設定 ---
-RSS_URL = "https://www.nintendo.co.jp/news/whatsnew.xml?_gl=1*1qkfg0q*_gcl_aw*R0NMLjE3Njg3MzU3NDMuQ2owS0NRaUFwckxMQmhDTUFSSXNBRURoZFBkam1DMUxGQjMzRW9SWXpQRmtsX2tZcC1aeGM4NnFjLWE1OW9GWjVMVHJyZjlCVTZiRXdLNGFBazdBRUFMd193Y0I.*_gcl_au*MjUzODU0NTQwLjE3NjU3ODY0Mjc.*_ga*MTE5MzAxODE5LjE3NjI1MDI1MTg.*_ga_128BBZFV9V*czE3NzE0MDc3MTAkbzE5JGcxJHQxNzcxNDA3ODQ2JGoyOCRsMCRoMA.."
+RSS_URL = "https://www.nintendo.co.jp/rss/topics/index.xml"
 LINE_NOTIFY_URL = "https://api.line.me/v2/bot/message/push"
 LAST_FILE = "last_news.txt"
-MAX_SEND_COUNT = 3  # 1回の実行で送る最大件数（LINE枠節約のため）
+MAX_SEND_COUNT = 3 
 
 def send_line_message(item):
-    """LINEにメッセージを送信する"""
+    """LINEに任天堂風のフォーマットで送信する"""
     token = os.environ.get("LINE_ACCESS_TOKEN")
     user_id = os.environ.get("USER_ID")
     
@@ -19,45 +19,46 @@ def send_line_message(item):
         "Authorization": f"Bearer {token}"
     }
     
-    # 読みやすくフォーマット
-    message = f"【任天堂新着】\n\n{item.title}\n{item.link}"
+    # 🌟 任天堂トピックス風のUIデザイン
+    message = (
+        f"┏━━━━━━━━━━━━┓\n"
+        f" 🔴 Nintendo Topics \n"
+        f"┗━━━━━━━━━━━━┛\n\n"
+        f"【新着】\n"
+        f"{item.title}\n\n"
+        f"▼ 詳しくはこちら\n"
+        f"{item.link}"
+    )
     
     payload = {
         "to": user_id,
-        "messages": [
-            {
-                "type": "text",
-                "text": message
-            }
-        ]
+        "messages": [{"type": "text", "text": message}]
     }
     
     res = requests.post(LINE_NOTIFY_URL, headers=headers, json=payload)
     if res.status_code == 200:
         print(f"送信成功: {item.title}")
     else:
-        print(f"送信失敗: {res.status_code} {res.text}")
+        print(f"送信失敗: {res.status_code}")
 
 def main():
-    # 1. RSSを取得（User-Agentを設定してアクセス拒否を防止）
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+    # 1. 正しいURLで取得
+    headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(RSS_URL, headers=headers)
     feed = feedparser.parse(response.content)
     
-    # 2. 記事を日付の古い順に並び替え
-    # published_parsed が無い場合に備えて取得順も考慮
+    # 2. 古い順にソート（時系列を正す）
     entries = sorted(feed.entries, key=lambda x: x.get("published_parsed", 0))
     
-    # 3. 前回の最終タイトルを読み込み
+    # 3. 既読タイトルの読み込み
     last_title = ""
     if os.path.exists(LAST_FILE):
         with open(LAST_FILE, "r", encoding="utf-8") as f:
             last_title = f.read().strip()
     
-    # 4. 新着記事を特定
+    # 4. 未送信の記事をピックアップ
     new_items = []
-    found_last = (last_title == "") # 初回実行なら全て新着扱い
-    
+    found_last = (last_title == "")
     for item in entries:
         if found_last:
             new_items.append(item)
@@ -68,21 +69,18 @@ def main():
         print("新着記事はありませんでした。")
         return
 
-    # 5. 送信（最大件数制限を適用）
+    # 5. 送信（最大3件まで）
     send_cnt = 0
     latest_processed_title = last_title
-    
     for item in new_items:
         if send_cnt >= MAX_SEND_COUNT:
-            print(f"送信上限({MAX_SEND_COUNT}件)に達したため、残りは次回に持ち越します。")
             break
-            
         send_line_message(item)
         latest_processed_title = item.title
         send_cnt += 1
-        time.sleep(1) # 連続送信による負荷軽減
+        time.sleep(1) 
     
-    # 6. 最後に送信した記事のタイトルを保存
+    # 6. 保存
     with open(LAST_FILE, "w", encoding="utf-8") as f:
         f.write(latest_processed_title)
 
