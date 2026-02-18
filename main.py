@@ -4,7 +4,7 @@ import os
 import time
 
 # --- 設定 ---
-RSS_URL = "https://www.nintendo.co.jp/rss/topics/index.xml"
+RSS_URL = "https://www.nintendo.co.jp/news/whatsnew.xml"
 LINE_NOTIFY_URL = "https://api.line.me/v2/bot/message/push"
 LAST_FILE = "last_news.txt"
 MAX_SEND_COUNT = 3 
