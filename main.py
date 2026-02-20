@@ -12,80 +12,39 @@ LAST_FILE = "last_news.txt"
 MAX_SEND_COUNT = 3 
 
 def get_article_image(url):
-    """記事のURLからOGP画像をスクレイピングする"""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         res = requests.get(url, headers=headers, timeout=5)
         soup = BeautifulSoup(res.text, "html.parser")
         og_image = soup.find("meta", property="og:image")
-        if og_image:
-            return og_image["content"]
+        return og_image["content"] if og_image else "https://www.nintendo.co.jp/common/img/header/logo_nintendo.png"
     except:
-        pass
-    return "https://www.nintendo.co.jp/common/img/header/logo_nintendo.png"
+        return "https://www.nintendo.co.jp/common/img/header/logo_nintendo.png"
 
 def send_flex_message(item):
     token = os.environ.get("LINE_ACCESS_TOKEN")
     user_id = os.environ.get("USER_ID")
-    
-    # カテゴリー（トピックの種類）を取得。無い場合は「Nintendo News」
     category_name = item.get("category", "Nintendo News")
     image_url = get_article_image(item.link)
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}"
-    }
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
     
     flex_contents = {
         "type": "bubble",
-        "hero": {
-            "type": "image",
-            "url": image_url,
-            "size": "full",
-            "aspectRatio": "20:13",
-            "aspectMode": "cover"
-        },
+        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "20:13", "aspectMode": "cover"},
         "body": {
-            "type": "box",
-            "layout": "vertical",
+            "type": "box", "layout": "vertical",
             "contents": [
-                {
-                    "type": "text", 
-                    "text": category_name,  # 🌟 ここがトピックの種類になります
-                    "weight": "bold", 
-                    "color": "#e60012", 
-                    "size": "sm"
-                },
-                {
-                    "type": "text", 
-                    "text": item.title, 
-                    "weight": "bold", 
-                    "size": "md", 
-                    "wrap": True, 
-                    "margin": "md"
-                }
+                {"type": "text", "text": category_name, "weight": "bold", "color": "#e60012", "size": "sm"},
+                {"type": "text", "text": item.title, "weight": "bold", "size": "md", "wrap": True, "margin": "md"}
             ]
         },
         "footer": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#e60012",
-                    "action": {"type": "uri", "label": "詳しく見る", "uri": item.link}
-                }
-            ]
+            "type": "box", "layout": "vertical",
+            "contents": [{"type": "button", "style": "primary", "color": "#e60012", "action": {"type": "uri", "label": "詳しく見る", "uri": item.link}}]
         }
     }
-
-    payload = {
-        "to": user_id,
-        "messages": [{"type": "flex", "altText": f"[{category_name}] {item.title}", "contents": flex_contents}]
-    }
-    
+    payload = {"to": user_id, "messages": [{"type": "flex", "altText": item.title, "contents": flex_contents}]}
     requests.post(LINE_NOTIFY_URL, headers=headers, data=json.dumps(payload))
 
 def main():
@@ -93,7 +52,8 @@ def main():
     response = requests.get(RSS_URL, headers=headers)
     feed = feedparser.parse(response.content)
     
-    entries = sorted(feed.entries, key=lambda x: x.get("published_parsed", 0))
+    # 🌟 新しい順（降順）に並べ替え
+    entries = sorted(feed.entries, key=lambda x: x.get("published_parsed", 0), reverse=True)
     
     last_title = ""
     if os.path.exists(LAST_FILE):
@@ -101,29 +61,25 @@ def main():
             last_title = f.read().strip()
     
     new_items = []
-    found_last = (last_title == "")
     for item in entries:
-        if found_last:
-            new_items.append(item)
-        elif item.title == last_title:
-            found_last = True
+        if item.title == last_title:
+            break
+        new_items.append(item)
             
     if not new_items:
         print("新着なし")
         return
 
+    # 🌟 新着の中でも「一番古いもの」から送ることで、順番を正しくする
     send_cnt = 0
-    latest_title = last_title
-    for item in new_items:
-        if send_cnt >= MAX_SEND_COUNT:
-            break
+    for item in reversed(new_items[:MAX_SEND_COUNT]):
         send_flex_message(item)
-        latest_title = item.title
         send_cnt += 1
         time.sleep(2)
     
+    # 🌟 送信した中で「最も新しい記事」を保存
     with open(LAST_FILE, "w", encoding="utf-8") as f:
-        f.write(latest_title)
+        f.write(new_items[0].title)
 
 if __name__ == "__main__":
     main()
